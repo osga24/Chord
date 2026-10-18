@@ -56,6 +56,34 @@ impl AppSettings {
         })
     }
 
+    pub fn toggle_caps_lock_switches_input_source(&self) -> anyhow::Result<()> {
+        self.update_state(|state| {
+            state.caps_lock_switches_input_source = !state.caps_lock_switches_input_source;
+        })
+    }
+
+    /// Whether a Caps tap switches input sources. Read on every Caps press.
+    pub fn caps_lock_switches_input_source(&self) -> bool {
+        self.observable
+            .get_state()
+            .is_ok_and(|state| state.caps_lock_switches_input_source)
+    }
+
+    /// Restores the saved input source switching before the keyboard starts. The other
+    /// settings are not restored at launch yet (see `load_state`).
+    pub fn restore_caps_lock_switches_input_source(&self) -> anyhow::Result<()> {
+        let enabled = Self::read_bool_setting(
+            &self.handle,
+            CAPS_LOCK_SWITCHES_INPUT_SOURCE_KEY,
+            AppSettingsState::default().caps_lock_switches_input_source,
+        )?;
+        self.observable.set_state(|mut state| {
+            state.caps_lock_switches_input_source = enabled;
+            state
+        })?;
+        Ok(())
+    }
+
     fn update_state<F>(&self, update: F) -> anyhow::Result<()>
     where
         F: FnOnce(&mut AppSettingsState),
@@ -115,6 +143,11 @@ impl AppSettings {
                 HIDE_GUIDE_BY_DEFAULT_KEY,
                 defaults.is_chord_panel_hidden_by_default,
             )?,
+            caps_lock_switches_input_source: Self::read_bool_setting(
+                handle,
+                CAPS_LOCK_SWITCHES_INPUT_SOURCE_KEY,
+                defaults.caps_lock_switches_input_source,
+            )?,
         })
     }
 
@@ -143,6 +176,10 @@ impl AppSettings {
             HIDE_GUIDE_BY_DEFAULT_KEY,
             state.is_chord_panel_hidden_by_default,
         );
+        store.set(
+            CAPS_LOCK_SWITCHES_INPUT_SOURCE_KEY,
+            state.caps_lock_switches_input_source,
+        );
         store.save().context("failed to save app state store")?;
 
         Ok(())
@@ -163,3 +200,4 @@ fn cli_executable() -> anyhow::Result<std::path::PathBuf> {
 const SHOW_MENU_BAR_ICON_KEY: &str = "showMenuBarIcon";
 const SHOW_DOCK_ICON_KEY: &str = "showDockIcon";
 const HIDE_GUIDE_BY_DEFAULT_KEY: &str = "hideGuideByDefault";
+const CAPS_LOCK_SWITCHES_INPUT_SOURCE_KEY: &str = "capsLockSwitchesInputSource";

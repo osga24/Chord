@@ -23,6 +23,8 @@ export interface AppSettingsState {
 	showMenuBarIcon: boolean;
 	showDockIcon: boolean;
 	isChordPanelHiddenByDefault: boolean;
+	/** A Caps tap switches input sources instead of toggling Caps Lock. */
+	capsLockSwitchesInputSource: boolean;
 }
 
 export enum BuiltinChordKind {

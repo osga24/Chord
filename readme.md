@@ -37,7 +37,7 @@ Because we only use it as part of a key combination, pressing `Caps Lock` on its
 
 To make this reliable, _Chord_ takes over the `Caps Lock` key while it runs and decides every change to Caps Lock itself. A tap turns Caps Lock off as soon as you press it, but turns it on only when you release it, because until then the press could still become `Caps Lock` + `Space`. While _Chord_ runs, features that rely on macOS handling the key itself don't work:
 
-- "Use the Caps Lock key to switch to and from ABC" in Keyboard settings.
+- "Use the Caps Lock key to switch to and from ABC" in Keyboard settings. Turn on _Use Caps Lock to switch input sources_ in _Chord_'s settings instead: a tap switches between ABC and the input source you used last, and holding `Caps Lock` for half a second turns Caps Lock on. `Caps Lock` + `Space` never switches.
 - The Caps Lock key as the VoiceOver modifier. Set the VoiceOver modifier to `Control` + `Option` instead; _Chord_'s settings remind you when this applies.
 - Apps that read `Caps Lock` as an ordinary key, such as games or virtual machines that capture the keyboard.
 

@@ -1,9 +1,9 @@
-use super::caps_lock_guard::CapsLockGuard;
+use super::caps_lock_guard::{CapsLockGuard, CapsTap, Release};
 use super::caps_remap::{ProcessIdentity, RemapStore, SystemMappingTable};
 use super::health::{Backoff, InputHealth};
 use super::secure_input::SecureInputState;
 use super::tap::{TapAction, TapEvent, TapHandle};
-use super::{caps_guardian, caps_hotkey};
+use super::{caps_guardian, caps_hotkey, input_source};
 use crate::app::AppHandleExt;
 use crate::app::permissions::InputPermissions;
 use crate::models::{AppKeyboardState, CapturedKeyEvent, Key, KeyEvent, KeyEventAction};
@@ -107,6 +107,9 @@ impl AppKeyboard {
         let registered = self.handle.run_on_main_thread(move || {
             if let Err(error) = caps_hotkey::set_registered(&handle, active) {
                 log::warn!("Failed to update the Caps hotkey fallback: {error:#}");
+            }
+            if active {
+                input_source::observe_changes();
             }
         });
         if let Err(error) = registered {
@@ -333,7 +336,7 @@ impl AppKeyboard {
                             handle
                                 .app_state()
                                 .keyboard()
-                                .handle_caps_event(&event.event);
+                                .handle_caps_event(&event.event, event.captured_at);
                             if let Err(error) =
                                 handle.app_state().app_controller().handle_key_event(&event)
                             {
@@ -366,6 +369,7 @@ impl AppKeyboard {
                     let input = CapturedKeyEvent {
                         event,
                         caps_pressed: keyboard.state().is_caps_pressed(),
+                        captured_at: Instant::now(),
                     };
                     let action = keyboard.handle_key_event(&input);
                     match tx.try_send((generation, input)) {
@@ -438,14 +442,22 @@ impl AppKeyboard {
         KeyEventAction::Forward
     }
 
-    /// Applies Caps Lock for a Caps press or release, in order with the controller.
-    /// See `CapsLockGuard` for the rules.
-    fn handle_caps_event(&self, event: &KeyEvent) {
+    /// Applies Caps Lock for a Caps press or release made at `at`, in order with the
+    /// controller. See `CapsLockGuard` for the rules.
+    fn handle_caps_event(&self, event: &KeyEvent, at: Instant) {
         match event {
             KeyEvent::Press(Key(KeyMappingCode::CapsLock)) => {
                 let state = self.handle.app_state();
-                let in_normal_mode = state.app_controller().app_mode().is_chord()
-                    && !state.chord_mode_manager().is_inserting();
+                let app_mode = state.app_controller().app_mode();
+                let in_normal_mode =
+                    app_mode.is_chord() && !state.chord_mode_manager().is_inserting();
+                // Insert mode types into Chord, where a tap keeps toggling Caps Lock.
+                let action =
+                    if app_mode.is_idle() && state.settings().caps_lock_switches_input_source() {
+                        CapsTap::SwitchInputSource
+                    } else {
+                        CapsTap::ToggleCapsLock
+                    };
                 let current = match Self::get_caps_lock() {
                     Ok(current) => current,
                     Err(error) => {
@@ -453,16 +465,40 @@ impl AppKeyboard {
                         return;
                     }
                 };
-                if let Some(enabled) = self.caps_lock_guard.pressed(current, in_normal_mode) {
+                if let Some(enabled) =
+                    self.caps_lock_guard
+                        .pressed(current, in_normal_mode, action, at)
+                {
                     Self::apply_caps_lock(enabled);
                 }
             }
             KeyEvent::Release(Key(KeyMappingCode::CapsLock)) => {
-                if let Some(enabled) = self.caps_lock_guard.released() {
-                    Self::apply_caps_lock(enabled);
+                match self.caps_lock_guard.released(at) {
+                    Some(Release::SetCapsLock(enabled)) => Self::apply_caps_lock(enabled),
+                    Some(Release::SwitchInputSource) => self.switch_input_source(),
+                    None => {}
                 }
             }
             _ => {}
+        }
+    }
+
+    /// Switches input sources for a Caps tap. Text Input Sources only work on the main
+    /// thread, which runs these in order, so quick taps alternate. With nothing to
+    /// switch to, the tap turns Caps Lock on instead.
+    fn switch_input_source(&self) {
+        let scheduled = self
+            .handle
+            .run_on_main_thread(|| match input_source::switch() {
+                Ok(Some(source)) => log::debug!("Caps tap switched the input source to {source}"),
+                Ok(None) => {
+                    log::debug!("No input source to switch to; the Caps tap turns Caps Lock on");
+                    Self::apply_caps_lock(true);
+                }
+                Err(error) => log::warn!("Failed to switch the input source: {error:#}"),
+            });
+        if let Err(error) = scheduled {
+            log::warn!("Failed to schedule the input source switch: {error:#}");
         }
     }
 
@@ -472,7 +508,7 @@ impl AppKeyboard {
         let detector = self.handle.app_state().dev_lockfile_detector();
         detector.with_input_owner(|_generation| {
             self.keyboard_state.handle_key_event(event);
-            self.handle_caps_event(event);
+            self.handle_caps_event(event, Instant::now());
         });
     }
 

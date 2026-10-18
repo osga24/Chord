@@ -193,6 +193,20 @@ the tap swallows it otherwise. A Caps Lock toggle that macOS makes itself (keyco
 57 in the tap) means another app removed the mapping, and Chord installs it again.
 UTM's "Caps Lock as key" mode does this on launch.
 
+With **Use Caps Lock to switch input sources** on (`capsLockSwitchesInputSource` in
+the app state store), a tap outside Chord switches keyboard input sources instead
+(`input_source.rs`), standing in for macOS's own setting, which needs the unmapped key.
+Like turning Caps Lock on, the switch waits for release: a press that started Chord
+with Space never switches, and one held for 500 ms (timed when the event tap sees it)
+turns Caps Lock on. A tap that turns Caps Lock off does only that, and insert mode keeps
+toggling Caps Lock. A tap goes between the ASCII-capable and the other enabled sources,
+returning to the one used last on that side; changes made elsewhere are followed through
+`kTISNotifySelectedKeyboardInputSourceChanged`. Text Input Sources calls run on the
+main thread, which keeps quick taps in order. With no source on the other side, the tap
+turns Caps Lock on. Only public Text Input Sources APIs are used; macOS's setting is not
+read. Under Secure Input, the hotkey fallback switches the same way, though a password
+field may restrict input to ASCII-capable sources.
+
 Apps learn about Caps Lock changes from `flagsChanged` events. A real toggle sends
 one with keycode 57. `IOHIDSetModifierLockState` instead sends one with keycode 255
 from every keyboard, then another with the next key's code just before that key.

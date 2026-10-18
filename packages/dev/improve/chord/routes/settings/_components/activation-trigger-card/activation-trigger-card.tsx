@@ -8,6 +8,9 @@ import {
 	CardHeader,
 	CardTitle,
 } from '@chord/dev.improve.chord.components.ui.card';
+import { Checkbox } from '@chord/dev.improve.chord.components.ui.checkbox';
+import { Label } from '@chord/dev.improve.chord.components.ui.label';
+import { StateQueries, useSettingsState } from '@chord/dev.improve.chord.lib.state';
 import { ShortcutKeys } from '@chord/dev.improve.chord.routes.settings._components.shortcut-keys';
 import { TriangleAlert } from 'lucide-react';
 
@@ -32,9 +35,50 @@ export function ActivationTriggerCard() {
 						<ShortcutKeys shortcut="capsLock+space" />
 					</div>
 				</div>
+				<StateQueries queries={[useSettingsState()]} quiet>
+					{(settings) => <InputSourceSwitching settings={settings} />}
+				</StateQueries>
 				<VoiceOverWarning />
 			</CardContent>
 		</Card>
+	);
+}
+
+/**
+ * macOS's "Use the Caps Lock key to switch to and from ABC" can't see the key while Chord
+ * owns it, so Chord offers the same behavior itself.
+ */
+function InputSourceSwitching({
+	settings,
+}: {
+	settings: NonNullable<ReturnType<typeof useSettingsState>['data']>
+}) {
+	const toggleMutation = useMutation({
+		mutationFn: taurpc.toggleCapsLockSwitchesInputSource,
+	});
+
+	return (
+		<div className="flex items-start gap-3 rounded-lg border bg-background/80 px-3 py-3">
+			<Checkbox
+				id="caps-lock-switches-input-source"
+				checked={settings.capsLockSwitchesInputSource}
+				disabled={toggleMutation.isPending}
+				onCheckedChange={() => {
+					toggleMutation.mutate();
+				}}
+			/>
+			<div className="space-y-1">
+				<Label htmlFor="caps-lock-switches-input-source">
+					Use Caps Lock to switch input sources
+				</Label>
+				<p className="text-xs text-muted-foreground">
+					Tap Caps Lock to switch between ABC and the input source you used last, such as
+					Pinyin or Zhuyin. Hold it to turn Caps Lock on. Chord replaces the macOS setting
+					"Use the Caps Lock key to switch to and from ABC", which can't work while Chord
+					owns the key.
+				</p>
+			</div>
+		</div>
 	);
 }
 

@@ -3,6 +3,7 @@ use derive_more::Display;
 use keycode::KeyMappingCode;
 use keycode::KeyMappingCode::*;
 use std::str::FromStr;
+use std::time::Instant;
 use typeshare::typeshare;
 
 /// Text notation for keys without a sequence character.
@@ -27,6 +28,8 @@ pub enum KeyEvent {
 pub struct CapturedKeyEvent {
     pub event: KeyEvent,
     pub caps_pressed: bool,
+    /// When the event tap saw the event, before it waited in the queue.
+    pub captured_at: Instant,
 }
 
 impl CapturedKeyEvent {
@@ -48,6 +51,7 @@ mod captured_input_tests {
         tx.send(CapturedKeyEvent {
             event: KeyEvent::Press(Key(Space)),
             caps_pressed: caps.load(Ordering::SeqCst),
+            captured_at: Instant::now(),
         })
         .unwrap();
         caps.store(false, Ordering::SeqCst);
@@ -60,6 +64,7 @@ mod captured_input_tests {
         let input = CapturedKeyEvent {
             event: KeyEvent::Press(Key(Space)),
             caps_pressed: caps.load(Ordering::SeqCst),
+            captured_at: Instant::now(),
         };
         caps.store(true, Ordering::SeqCst);
         assert!(!input.activates_chord_mode());
@@ -67,6 +72,7 @@ mod captured_input_tests {
             !CapturedKeyEvent {
                 event: KeyEvent::Release(Key(Space)),
                 caps_pressed: true,
+                captured_at: Instant::now(),
             }
             .activates_chord_mode()
         );

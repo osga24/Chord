@@ -149,6 +149,9 @@ pub fn setup(app: &mut tauri::App) -> Result<()> {
 
     log::info!("Loading permissions synchronously to register input handlers immediately");
     let state = handle.app_state();
+    if let Err(error) = state.settings().restore_caps_lock_switches_input_source() {
+        log::error!("Failed to restore Caps Lock input source switching: {error:#}");
+    }
     if let Err(e) = tauri::async_runtime::block_on(state.permissions().load()) {
         log::error!("Failed to load permissions: {e}");
     }
